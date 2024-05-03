@@ -76,6 +76,7 @@ void openDirectories(char *directorPath)
 
                 ssize_t result = write(fptr, &snapshotContent, strlen(snapshotContent) - 1);
 
+                printf("Snapshot for %s created successfully\n", entry->d_name);
                 close(fptr);
                
                 break;
@@ -94,9 +95,25 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    for (int i = 1; i < argc; i++)
-    {
-        openDirectories(argv[i]);
+    pid_t pid[argc-1];
+    int status;
+
+    for(int i = 1; i < argc; i++){
+        if( (pid[i-1] = fork()) < 0){
+            printf("Cannot create child process\n");
+            exit(1);
+        }
+        if(pid[i-1] == 0){
+          
+            openDirectories(argv[i]);
+            exit(0);
+        }
+    }
+
+    for(int i = 1; i < argc; i++){
+        wait(&status);
+        if(WIFEXITED(status) && pid[i-1] != 0)
+            printf("Child process %d terminated with PID %d terminated with exit code %d.\n", i, pid[i-1], WEXITSTATUS(status));
     }
 
     return 0;
