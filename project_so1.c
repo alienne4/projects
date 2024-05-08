@@ -43,6 +43,7 @@ void openDirectories(char *directorPath)
 
                 char snapshotFilename[1024]="";
                 sprintf(snapshotFilename, "%s.snapshot", filename);
+
                 
 
                 if(stat(filename, &buf) < 0)
@@ -74,13 +75,27 @@ void openDirectories(char *directorPath)
 
                 sprintf(snapshotContent, "Timestamp: %lld\nEntry: %s\nSize: %d\nLast Modified: %lld\nPermissions: %s\nInode number: %d\n", buf.st_atimespec.tv_sec, filename, buf.st_size, buf.st_mtimespec.tv_sec, filePermissions, buf.st_ino);
 
-                ssize_t result = write(fptr, &snapshotContent, strlen(snapshotContent) - 1);
+                write(fptr, &snapshotContent, strlen(snapshotContent) - 1);
 
                 printf("Snapshot for %s created successfully\n", entry->d_name);
+
                 close(fptr);
+
+                pid_t pid = fork();
+
+                if (pid < 0) {
+                    perror("fork");
+                    return;
+                }
+
+                if (pid == 0) {
+                    execlp("/bin/sh", "sh", "/Users/adelinchis/Desktop/verify_for_malicious.sh", filename, NULL);
+
+                    printf("execlp error\n");
+                } 
+
                
                 break;
-
         }
     }
 
