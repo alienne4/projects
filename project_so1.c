@@ -89,7 +89,7 @@ void openDirectories(char *directorPath)
                 }
 
                 if (pid == 0) {
-                    execlp("/bin/sh", "sh", "/Users/adelinchis/Desktop/verify_for_malicious.sh", filename, NULL);
+                    execlp("/bin/sh", "sh", "/Users/Alice/Desktop/verify_for_malicious.sh", filename, NULL);
 
                     printf("execlp error\n");
                 } 
