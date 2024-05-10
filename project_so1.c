@@ -14,7 +14,7 @@ void openDirectories(char *directorPath)
 
     if(director==NULL)
     {
-        printf("Acesta este un mesaj de eroaore");
+        printf("Acesta este un mesaj de eroare");
         return;
     }
 
@@ -73,7 +73,7 @@ void openDirectories(char *directorPath)
                 filePermissions[10] = '\0';
    
 
-                sprintf(snapshotContent, "Timestamp: %lld\nEntry: %s\nSize: %d\nLast Modified: %lld\nPermissions: %s\nInode number: %d\n", buf.st_atimespec.tv_sec, filename, buf.st_size, buf.st_mtimespec.tv_sec, filePermissions, buf.st_ino);
+                sprintf(snapshotContent, "Timestamp: %lld\nEntry: %s\nSize: %d\nLast Modified: %lld\nPermissions: %s\nInode number: %d\n", buf.st_atime, filename, buf.st_size, buf.st_mtime, filePermissions, buf.st_ino);
 
                 write(fptr, &snapshotContent, strlen(snapshotContent) - 1);
 
@@ -89,7 +89,7 @@ void openDirectories(char *directorPath)
                 }
 
                 if (pid == 0) {
-                    execlp("/bin/sh", "sh", "/Users/Alice/Desktop/verify_for_malicious.sh", filename, NULL);
+                    execlp("/bin/bash", "sh", "/home/ubuntu/OS/verify_for_malicious.sh", filename, NULL);
 
                     printf("execlp error\n");
                 } 
