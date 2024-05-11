@@ -8,13 +8,12 @@
 #include <unistd.h>
 #include <string.h>
 
-void openDirectories(char *directorPath)
-{
+void openDirectories(char *directorPath, int pipeWrite){
     DIR *director=opendir(directorPath);
 
     if(director==NULL)
     {
-        printf("Acesta este un mesaj de eroare");
+        printf("Acesta este un mesaj de eroare\n");
         return;
     }
 
@@ -34,7 +33,7 @@ void openDirectories(char *directorPath)
                 if (!(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0))
                 {
                      snprintf(path, sizeof(path), "%s/%s", directorPath, entry->d_name);
-                     openDirectories(path);
+                     openDirectories(path, pipeWrite);
                 }
                 break;
 
@@ -44,19 +43,24 @@ void openDirectories(char *directorPath)
                 char snapshotFilename[1024]="";
                 sprintf(snapshotFilename, "%s.snapshot", filename);
 
-                
+                if (access(snapshotFilename, F_OK) != -1) {
+                    printf("Snapshot already exists for %s\n", filename);
+                    continue;
+                }
+
+                int fptr = open(snapshotFilename, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+                if (fptr < 0) {
+                    perror("open");
+                    return;
+                }
+
+                char snapshotContent[1024] = "";
 
                 if(stat(filename, &buf) < 0)
                 {
                     printf("Error stat2 \n");
                     exit(-1);
                 }
-
-                int fptr;
-
-                fptr = open(snapshotFilename, O_CREAT | O_WRONLY | O_RDONLY);
-
-                char snapshotContent[1024] = "";
 
                 char filePermissions[11];
 
@@ -71,13 +75,22 @@ void openDirectories(char *directorPath)
                 filePermissions[8] = (buf.st_mode & S_IWOTH) ? 'w' : '-';
                 filePermissions[9] = (buf.st_mode & S_IXOTH) ? 'x' : '-';
                 filePermissions[10] = '\0';
-   
 
-                sprintf(snapshotContent, "Timestamp: %lld\nEntry: %s\nSize: %d\nLast Modified: %lld\nPermissions: %s\nInode number: %d\n", buf.st_atime, filename, buf.st_size, buf.st_mtime, filePermissions, buf.st_ino);
+                sprintf(snapshotContent, "Timestamp: %lld\nEntry: %s\nSize: %lld\nLast Modified: %lld\nPermissions: %s\nInode number: %lu\n", 
+                        (long long)buf.st_atime, filename, (long long)buf.st_size, (long long)buf.st_mtime, 
+                        filePermissions, (unsigned long)buf.st_ino);
 
                 write(fptr, &snapshotContent, strlen(snapshotContent) - 1);
 
                 printf("Snapshot for %s created successfully\n", entry->d_name);
+
+                char prevSnapshotFilename[1024]="";
+                sprintf(prevSnapshotFilename, "%s.prev.snapshot", filename);
+
+                if (access(prevSnapshotFilename, F_OK) != -1) {
+                    compareSnapshots(prevSnapshotFilename, snapshotFilename);
+                    remove(prevSnapshotFilename);
+                }
 
                 close(fptr);
 
@@ -88,18 +101,69 @@ void openDirectories(char *directorPath)
                     return;
                 }
 
-                if (pid == 0) {
-                    execlp("/bin/bash", "sh", "/home/ubuntu/OS/verify_for_malicious.sh", filename, NULL);
+                if(pipeWrite != -1){
+                    if (pid == 0) {
+                        execlp("/bin/bash", "sh", "/home/ubuntu/OS/verify_for_malicious.sh", filename, NULL);
 
-                    printf("execlp error\n");
-                } 
+                        printf("execlp error\n");
+                    } 
+                }
 
-               
                 break;
         }
     }
 
     closedir(director);
+}
+
+void compareSnapshots(const char *snapshotPath1, const char *snapshotPath2) {
+    FILE *file1 = fopen(snapshotPath1, "r");
+    FILE *file2 = fopen(snapshotPath2, "r");
+
+    if (file1 == NULL || file2 == NULL) {
+        perror("fopen");
+        return;
+    }
+
+    char line1[1024];
+    char line2[1024];
+    int lineCount = 0;
+    int differencesFound = 0;
+
+    while (fgets(line1, sizeof(line1), file1) != NULL && fgets(line2, sizeof(line2), file2) != NULL) {
+        lineCount++;
+        if (strcmp(line1, line2) != 0) {
+            differencesFound = 1;
+            break;
+        }
+    }
+
+    if (differencesFound) {
+        printf("Changes detected in %s:\n", snapshotPath2);
+
+        rewind(file1);
+        rewind(file2);
+
+        int lineNum = 0;
+        while (fgets(line1, sizeof(line1), file1) != NULL && fgets(line2, sizeof(line2), file2) != NULL) {
+            lineNum++;
+            if (strcmp(line1, line2) != 0) {
+                printf("Line %d: ", lineNum);
+                if (strlen(line1) == 0) {
+                    printf("File added\n");
+                } else if (strlen(line2) == 0) {
+                    printf("File deleted\n");
+                } else {
+                    printf("File edited\n");
+                }
+            }
+        }
+    } else {
+        printf("No changes detected between %s and %s\n", snapshotPath1, snapshotPath2);
+    }
+
+    fclose(file1);
+    fclose(file2);
 }
 
 int main(int argc, char *argv[])
@@ -120,8 +184,19 @@ int main(int argc, char *argv[])
         }
         if(pid[i-1] == 0){
           
-            openDirectories(argv[i]);
+            openDirectories(argv[i], 1);
             exit(0);
+        }
+
+        int pipeFD[2];
+        if (pipe(pipeFD) == -1) {
+            perror("Pipe creation failed");
+            return 1;
+        }
+
+        pid_t verify = fork();
+        if(verify == 0){
+            openDirectories(argv[i], 1);
         }
     }
 
